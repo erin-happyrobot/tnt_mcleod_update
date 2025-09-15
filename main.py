@@ -57,11 +57,20 @@ def _fetch_order_data(order_id: str) -> dict:
     # If DNS is flaky, optionally route to a fixed IP while keeping Host header
     url_for_connect, host_override = _prepare_target(url)
 
+    # Build headers with flexibility for proxy auth
     headers = {
-        "Authorization": f"Token {token}",
         "X-com.mcleodsoftware.CompanyID": company_id,
         "Accept": "application/json"
     }
+    # If a Bearer token is provided for the proxy (e.g., API Gateway authorizer), send it
+    proxy_bearer = os.getenv("PROXY_BEARER_TOKEN")
+    if proxy_bearer:
+        headers["Authorization"] = f"Bearer {proxy_bearer}"
+    # Choose which header carries the vendor token
+    vendor_auth_header = os.getenv("VENDOR_AUTH_HEADER")
+    if not vendor_auth_header:
+        vendor_auth_header = "Authorization" if not proxy_bearer else "X-Vendor-Authorization"
+    headers[vendor_auth_header] = f"Token {token}"
     # Optional API Gateway key if the proxy requires it
     proxy_api_key = os.getenv("PROXY_API_KEY")
     if proxy_api_key:
