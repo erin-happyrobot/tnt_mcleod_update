@@ -108,3 +108,85 @@ async def health_upstream() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=502, detail={"error": "Upstream TCP connect failed", "host": host, "port": port, "detail": str(exc)})
 
+
+
+# FastAPI snippet you can drop into your app for /health/upstream
+import socket, ssl, json, time
+from fastapi import APIRouter, Response
+import httpx
+
+router = APIRouter()
+
+UP_HOST = "tms-patt.loadtracking.com"
+UP_PORT = 5790
+UP_URL_HTTP = f"http://{UP_HOST}:{UP_PORT}/"
+UP_URL_HTTPS = f"https://{UP_HOST}:{UP_PORT}/"
+
+def try_dns(host: str):
+    t0 = time.time()
+    try:
+        infos = socket.getaddrinfo(host, None)
+        dur = round((time.time()-t0)*1000)
+        return {"ok": True, "answers": [i[4][0] for i in infos], "ms": dur}
+    except Exception as e:
+        dur = round((time.time()-t0)*1000)
+        return {"ok": False, "error": repr(e), "ms": dur}
+
+def try_tcp(host: str, port: int, family=socket.AF_UNSPEC):
+    t0 = time.time()
+    try:
+        for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
+            af, socktype, proto, canonname, sa = res
+            with socket.socket(af, socktype, proto) as s:
+                s.settimeout(5)
+                s.connect(sa)
+                dur = round((time.time()-t0)*1000)
+                return {"ok": True, "family": "IPv6" if af==socket.AF_INET6 else "IPv4", "peer": sa, "ms": dur}
+        return {"ok": False, "error": "no addrinfo results"}
+    except Exception as e:
+        dur = round((time.time()-t0)*1000)
+        return {"ok": False, "error": repr(e), "ms": dur}
+
+def try_tls(host: str, port: int):
+    t0 = time.time()
+    ctx = ssl.create_default_context()
+    # Ensure SNI is used
+    try:
+        with socket.create_connection((host, port), timeout=7) as sock:
+            with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                cert = ssock.getpeercert()
+                dur = round((time.time()-t0)*1000)
+                return {"ok": True, "cipher": ssock.cipher(), "cert_subject": cert.get('subject'), "ms": dur}
+    except Exception as e:
+        dur = round((time.time()-t0)*1000)
+        return {"ok": False, "error": repr(e), "ms": dur}
+
+async def try_http(url: str):
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=5.0)) as client:
+            r = await client.get(url)
+            dur = round((time.time()-t0)*1000)
+            return {"ok": True, "status": r.status_code, "ms": dur}
+    except Exception as e:
+        dur = round((time.time()-t0)*1000)
+        return {"ok": False, "error": repr(e), "ms": dur}
+
+@router.get("/health/upstream-debug")
+async def upstream_debug():
+    dns_res = try_dns(UP_HOST)
+    tcp_v4 = try_tcp(UP_HOST, UP_PORT, socket.AF_INET)
+    tcp_v6 = try_tcp(UP_HOST, UP_PORT, socket.AF_INET6)
+    tls_res = try_tls(UP_HOST, UP_PORT)
+    http_plain = await try_http(UP_URL_HTTP)
+    http_tls = await try_http(UP_URL_HTTPS)
+    body = {
+        "dns": dns_res,
+        "tcp_ipv4": tcp_v4,
+        "tcp_ipv6": tcp_v6,
+        "tls": tls_res,
+        "http_http": http_plain,
+        "http_https": http_tls,
+    }
+    status = 200 if any(x.get("ok") for x in [tcp_v4, tcp_v6, tls_res, http_plain, http_tls]) else 503
+    return Response(content=json.dumps(body, indent=2), media_type="application/json", status_code=status)
