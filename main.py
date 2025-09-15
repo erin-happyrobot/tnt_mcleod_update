@@ -47,16 +47,22 @@ def _fetch_order_data(order_id: str) -> dict:
     token = os.getenv('TOKEN')
     company_id = os.getenv('COMPANY_ID')
 
-    missing = [name for name, value in [("GET_URL", base_url), ("TOKEN", token), ("COMPANY_ID", company_id)] if not value]
+    missing = [n for n,v in [("GET_URL", base_url), ("TOKEN", token), ("COMPANY_ID", company_id)] if not v]
     if missing:
         raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": missing})
 
     url = _build_order_url(base_url, order_id)
+
+    # If DNS is flaky, optionally route to a fixed IP while keeping Host header
+    url_for_connect, host_override = _prepare_target(url)
+
     headers = {
         "Authorization": f"Token {token}",
         "X-com.mcleodsoftware.CompanyID": company_id,
         "Accept": "application/json"
     }
+    if host_override:
+        headers.update(host_override)
 
     method = (os.getenv("REQUEST_METHOD") or "GET").strip().upper()
     timeout_seconds = float(os.getenv("REQUEST_TIMEOUT_SECONDS") or 15)
@@ -64,18 +70,23 @@ def _fetch_order_data(order_id: str) -> dict:
 
     try:
         if method == "POST":
-            body = {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
-            response = requests.post(url, headers=headers, json=body, timeout=timeout_seconds, verify=verify_tls)
+            payload = {}
+            r = requests.post(url_for_connect, headers=headers, json=payload, timeout=timeout_seconds, verify=verify_tls)
         else:
-            response = requests.get(url, headers=headers, timeout=timeout_seconds, verify=verify_tls)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError:
-        try:
-            detail = response.json()
-        except Exception:
-            detail = response.text
-        raise HTTPException(status_code=response.status_code, detail={"error": "Upstream HTTP error", "detail": detail})
+            r = requests.get(url_for_connect, headers=headers, timeout=timeout_seconds, verify=verify_tls)
+        r.raise_for_status()
+        return r.json()
+
+    except requests.exceptions.SSLError as exc:
+        # Likely cert name/SNI mismatch when connecting by IP
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "TLS error to upstream",
+                "detail": str(exc),
+                "hint": "If you must connect by IP over HTTPS, prefer an /etc/hosts entry so SNI & certs match."
+            }
+        )
     except requests.exceptions.RequestException as exc:
         raise HTTPException(status_code=502, detail={"error": "Upstream connection error", "detail": str(exc)})
 
@@ -187,3 +198,24 @@ async def upstream_debug():
     }
     status = 200 if any(x.get("ok") for x in [tcp_v4, tcp_v6, tls_res, http_plain, http_tls]) else 503
     return Response(content=json.dumps(body, indent=2), media_type="application/json", status_code=status)
+
+
+def _prepare_target(url: str):
+    """
+    If UPSTREAM_CONNECT_IP is set, route the TCP connection to that IP
+    while preserving the Host header (virtual hosting).
+    NOTE: For HTTPS, SNI will still use the URL host (the IP in this case),
+    which may break TLS. Prefer /etc/hosts over this for HTTPS.
+    """
+    ip = os.getenv("UPSTREAM_CONNECT_IP")
+    if not ip:
+        return url, None  # no override
+
+    parsed = urlparse(url if "://" in url else f"https://{url}")
+    # Rebuild URL but swap hostname with IP (keep scheme/port/path/query)
+    netloc = f"{ip}:{parsed.port}" if parsed.port else ip
+    new_url = parsed._replace(netloc=netloc).geturl()
+
+    host_header = os.getenv("HOST_HEADER") or parsed.hostname
+    extra_headers = {"Host": host_header} if host_header else None
+    return new_url, extra_headers
