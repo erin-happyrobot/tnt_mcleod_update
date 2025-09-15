@@ -6,6 +6,10 @@ from urllib.parse import urlparse
 import os
 import requests
 import logging
+import ssl
+import json
+from fastapi import Response
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -109,14 +113,6 @@ async def health_upstream() -> dict:
         raise HTTPException(status_code=502, detail={"error": "Upstream TCP connect failed", "host": host, "port": port, "detail": str(exc)})
 
 
-
-# FastAPI snippet you can drop into your app for /health/upstream
-import socket, ssl, json, time
-from fastapi import APIRouter, Response
-import httpx
-
-router = APIRouter()
-
 UP_HOST = "tms-patt.loadtracking.com"
 UP_PORT = 5790
 UP_URL_HTTP = f"http://{UP_HOST}:{UP_PORT}/"
@@ -127,7 +123,7 @@ def try_dns(host: str):
     try:
         infos = socket.getaddrinfo(host, None)
         dur = round((time.time()-t0)*1000)
-        return {"ok": True, "answers": [i[4][0] for i in infos], "ms": dur}
+        return {"ok": True, "answers": sorted({i[4][0] for i in infos}), "ms": dur}
     except Exception as e:
         dur = round((time.time()-t0)*1000)
         return {"ok": False, "error": repr(e), "ms": dur}
@@ -150,7 +146,6 @@ def try_tcp(host: str, port: int, family=socket.AF_UNSPEC):
 def try_tls(host: str, port: int):
     t0 = time.time()
     ctx = ssl.create_default_context()
-    # Ensure SNI is used
     try:
         with socket.create_connection((host, port), timeout=7) as sock:
             with ctx.wrap_socket(sock, server_hostname=host) as ssock:
@@ -172,7 +167,9 @@ async def try_http(url: str):
         dur = round((time.time()-t0)*1000)
         return {"ok": False, "error": repr(e), "ms": dur}
 
-@router.get("/health/upstream-debug")
+
+
+@app.get("/health/upstream-debug")
 async def upstream_debug():
     dns_res = try_dns(UP_HOST)
     tcp_v4 = try_tcp(UP_HOST, UP_PORT, socket.AF_INET)
