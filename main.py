@@ -43,7 +43,7 @@ def _build_order_url(base_url: str, order_id: str) -> str:
 
 
 def _fetch_order_data(order_id: str) -> dict:
-    base_url = os.getenv('GET_URL')
+    base_url = os.getenv('GET_URL', "") + "/orders"
     token = os.getenv('TOKEN')
     company_id = os.getenv('COMPANY_ID')
 
@@ -51,7 +51,7 @@ def _fetch_order_data(order_id: str) -> dict:
     if missing:
         raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": missing})
 
-    url = _build_order_url(base_url, order_id)
+    url = base_url + "/" + order_id
 
     # If DNS is flaky, optionally route to a fixed IP while keeping Host header
     url_for_connect, host_override = _prepare_target(url)
