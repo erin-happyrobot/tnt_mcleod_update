@@ -60,21 +60,9 @@ def _fetch_order_data(order_id: str) -> dict:
     # Build headers with flexibility for proxy auth
     headers = {
         "X-com.mcleodsoftware.CompanyID": company_id,
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Authorization": f"Token {token}"
     }
-    # If a Bearer token is provided for the proxy (e.g., API Gateway authorizer), send it
-    proxy_bearer = os.getenv("PROXY_BEARER_TOKEN")
-    if proxy_bearer:
-        headers["Authorization"] = f"Bearer {proxy_bearer}"
-    # Choose which header carries the vendor token
-    vendor_auth_header = os.getenv("VENDOR_AUTH_HEADER")
-    if not vendor_auth_header:
-        vendor_auth_header = "Authorization" if not proxy_bearer else "X-Vendor-Authorization"
-    headers[vendor_auth_header] = f"Token {token}"
-    # Optional API Gateway key if the proxy requires it
-    proxy_api_key = os.getenv("PROXY_API_KEY")
-    if proxy_api_key:
-        headers["X-API-Key"] = proxy_api_key
     if host_override:
         headers.update(host_override)
 
