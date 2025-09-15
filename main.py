@@ -62,6 +62,10 @@ def _fetch_order_data(order_id: str) -> dict:
         "X-com.mcleodsoftware.CompanyID": company_id,
         "Accept": "application/json"
     }
+    # Optional API Gateway key if the proxy requires it
+    proxy_api_key = os.getenv("PROXY_API_KEY")
+    if proxy_api_key:
+        headers["X-API-Key"] = proxy_api_key
     if host_override:
         headers.update(host_override)
 
@@ -83,6 +87,14 @@ def _fetch_order_data(order_id: str) -> dict:
         r.raise_for_status()
         return r.json()
 
+    except requests.exceptions.HTTPError as exc:
+        # Surface upstream status and body to the client for clarity (e.g., 403 Forbidden)
+        status = getattr(exc.response, "status_code", 502) if hasattr(exc, "response") else 502
+        try:
+            detail = exc.response.json() if exc.response is not None else str(exc)
+        except Exception:
+            detail = exc.response.text if exc.response is not None else str(exc)
+        raise HTTPException(status_code=status, detail={"error": "Upstream HTTP error", "detail": detail})
     except requests.exceptions.SSLError as exc:
         # Likely cert name/SNI mismatch when connecting by IP
         raise HTTPException(
