@@ -43,7 +43,7 @@ def _build_order_url(base_url: str, order_id: str) -> str:
 
 
 def _fetch_order_data(order_id: str) -> dict:
-    base_url = os.getenv('GET_URL', "") + "/orders"
+    base_url = os.getenv('GET_URL')
     token = os.getenv('TOKEN')
     company_id = os.getenv('COMPANY_ID')
 
@@ -51,7 +51,8 @@ def _fetch_order_data(order_id: str) -> dict:
     if missing:
         raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": missing})
 
-    url = base_url + "/" + order_id
+    # Build URL safely: if GET_URL already ends with /orders, avoid duplicating
+    url = _build_order_url(base_url, order_id)
 
     # If DNS is flaky, optionally route to a fixed IP while keeping Host header
     url_for_connect, host_override = _prepare_target(url)
@@ -67,6 +68,11 @@ def _fetch_order_data(order_id: str) -> dict:
     method = (os.getenv("REQUEST_METHOD") or "GET").strip().upper()
     timeout_seconds = float(os.getenv("REQUEST_TIMEOUT_SECONDS") or 15)
     verify_tls = _parse_bool_env("REQUESTS_VERIFY", True)
+    # If forcing connect to a specific IP over HTTPS, TLS verification will likely fail
+    # because SNI/cert do not match the IP. Default to disabling verification in that case
+    # unless the user explicitly set REQUESTS_VERIFY.
+    if os.getenv("UPSTREAM_CONNECT_IP") and url.lower().startswith("https://") and os.getenv("REQUESTS_VERIFY") is None:
+        verify_tls = False
 
     try:
         if method == "POST":
