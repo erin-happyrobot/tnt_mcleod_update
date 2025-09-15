@@ -130,6 +130,25 @@ async def health_upstream() -> dict:
         raise HTTPException(status_code=502, detail={"error": "Upstream TCP connect failed", "host": host, "port": port, "detail": str(exc)})
 
 
+@app.get("/health/upstream-ip")
+async def health_upstream_ip() -> dict:
+    base_url = os.getenv('GET_URL')
+    ip = os.getenv('UPSTREAM_CONNECT_IP')
+    if not base_url:
+        raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": ["GET_URL"]})
+    if not ip:
+        raise HTTPException(status_code=400, detail={"error": "UPSTREAM_CONNECT_IP not set"})
+    parsed = urlparse(base_url if "://" in base_url else f"https://{base_url}")
+    port = parsed.port or (443 if (parsed.scheme or "https").lower() == "https" else 80)
+    try:
+        start = time.time()
+        with socket.create_connection((ip, port), timeout=5):
+            pass
+        connect_ms = int((time.time() - start) * 1000)
+        return {"status": "ok", "ip": ip, "port": port, "connect_ms": connect_ms}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"error": "Upstream IP TCP connect failed", "ip": ip, "port": port, "detail": str(exc)})
+
 UP_HOST = "tms-patt.loadtracking.com"
 UP_PORT = 5790
 UP_URL_HTTP = f"http://{UP_HOST}:{UP_PORT}/"
