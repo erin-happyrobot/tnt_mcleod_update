@@ -149,6 +149,31 @@ async def health_upstream_ip() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=502, detail={"error": "Upstream IP TCP connect failed", "ip": ip, "port": port, "detail": str(exc)})
 
+
+@app.get("/health/egress-ip")
+async def health_egress_ip() -> dict:
+    endpoints = [
+        "https://api.ipify.org?format=json",
+        "https://ifconfig.me/ip",
+    ]
+    last_error = None
+    for url in endpoints:
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=5.0)) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                try:
+                    data = r.json()
+                    ip = data.get("ip")
+                except Exception:
+                    ip = r.text.strip()
+                if ip:
+                    return {"status": "ok", "ip": ip, "source": url}
+        except Exception as e:
+            last_error = str(e)
+            continue
+    raise HTTPException(status_code=502, detail={"error": "Unable to determine egress IP", "detail": last_error})
+
 UP_HOST = "tms-patt.loadtracking.com"
 UP_PORT = 5790
 UP_URL_HTTP = f"http://{UP_HOST}:{UP_PORT}/"
