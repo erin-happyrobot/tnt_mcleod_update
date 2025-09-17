@@ -10,6 +10,8 @@ import ssl
 import json
 from fastapi import Response
 import httpx
+from copy import deepcopy
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -278,3 +280,116 @@ def _prepare_target(url: str):
     host_header = os.getenv("HOST_HEADER") or parsed.hostname
     extra_headers = {"Host": host_header} if host_header else None
     return new_url, extra_headers
+
+@app.put("/update_load_data")
+def transform_payload(
+    payload: Dict[str, Any],
+    extracted_actual_arrival: Optional[str] = None,
+    extracted_actual_departure: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    - Remove all instances of keys in FIELDS_TO_REMOVE anywhere in the structure.
+    - Apply status rules based on message.movements[0].brokerage_status:
+        * ARVDSHPPER -> status=P; mov[0].brokerage_status=ARVDSHPR; stops[0].status=A; stops[0].actual_arrival=extracted_actual_arrival; mov[0].status=P
+        * ENROUTE    -> status=P; mov[0].brokerage_status=ENROUTE;   stops[0].status=D; stops[0].actual_departure=extracted_actual_departure; mov[0].status=P
+        * ARVDCNSG   -> status=P; mov[0].brokerage_status=ARVDCNSG;  stops[-1].status=A; stops[-1].actual_arrival=extracted_actual_arrival; mov[0].status=P
+        * DELIVER    -> status=D; mov[0].brokerage_status=DELIVER;   stops[-1].status=D; stops[-1].actual_departure=extracted_actual_departure; mov[0].status=D
+        * BREAKDWN   -> (no changes; placeholder branch)
+    - If "message" doesn't exist, will fall back to top-level "status" only where applicable.
+    """
+    data = deepcopy(payload)
+
+    msg = data.get("message")
+    if not isinstance(msg, dict):
+        # Still strip fields even if structure isn't what we expect.
+        return _remove_fields(data)
+
+    mov0 = _get_first_movement(msg)
+    current_brokerage = (mov0.get("brokerage_status") if isinstance(mov0, dict) else None)
+    current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
+
+    # ----- Rules -----
+    if current_brokerage_norm == "ARVDSHPPER":
+        # status = P
+        msg["status"] = "P"
+        if mov0 is not None:
+            mov0["brokerage_status"] = "ARVDSHPR"
+            mov0["status"] = "P"
+        st0 = _get_stop(msg, 0)
+        if st0 is not None:
+            st0["status"] = "A"
+            if extracted_actual_arrival is not None:
+                st0["actual_arrival"] = extracted_actual_arrival
+
+    elif current_brokerage_norm == "ENROUTE":
+        # status = P
+        msg["status"] = "P"
+        if mov0 is not None:
+            mov0["brokerage_status"] = "ENROUTE"
+            mov0["status"] = "P"
+        st0 = _get_stop(msg, 0)
+        if st0 is not None:
+            st0["status"] = "D"
+            if extracted_actual_departure is not None:
+                st0["actual_departure"] = extracted_actual_departure
+
+    elif current_brokerage_norm == "ARVDCNSG":
+        # status = P
+        msg["status"] = "P"
+        if mov0 is not None:
+            mov0["brokerage_status"] = "ARVDCNSG"
+            mov0["status"] = "P"
+        st_last = _get_stop(msg, -1)
+        if st_last is not None:
+            st_last["status"] = "A"
+            if extracted_actual_arrival is not None:
+                st_last["actual_arrival"] = extracted_actual_arrival
+
+    elif current_brokerage_norm == "DELIVER":
+        # status = D
+        msg["status"] = "D"
+        if mov0 is not None:
+            mov0["brokerage_status"] = "DELIVER"
+            mov0["status"] = "D"
+        st_last = _get_stop(msg, -1)
+        if st_last is not None:
+            st_last["status"] = "D"
+            if extracted_actual_departure is not None:
+                st_last["actual_departure"] = extracted_actual_departure
+
+    elif current_brokerage_norm == "BREAKDWN":
+        if mov0 is not None:
+            mov0["brokerage_status"] = "BREAKDWN"
+        pass
+
+    # Strip unwanted fields last so we don't accidentally reintroduce them.
+    return _remove_fields(data)
+
+FIELDS_TO_REMOVE = {"planning", "order_planning4", "order_planning3", "order_planning2"}
+
+
+def _remove_fields(obj: Any) -> Any:
+    """Recursively remove unwanted keys from any JSON-like Python object."""
+    if isinstance(obj, dict):
+        return {k: _remove_fields(v) for k, v in obj.items() if k not in FIELDS_TO_REMOVE}
+    if isinstance(obj, list):
+        return [_remove_fields(v) for v in obj]
+    return obj  # primitives
+
+
+def _get_stop(msg: Dict[str, Any], index: int) -> Optional[Dict[str, Any]]:
+    stops = msg.get("stops")
+    if isinstance(stops, list) and stops:
+        if index == -1:
+            return stops[-1] if isinstance(stops[-1], dict) else None
+        if 0 <= index < len(stops):
+            return stops[index] if isinstance(stops[index], dict) else None
+    return None
+
+
+
+def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    movs = msg.get("movements")
+    if isinstance(movs, list) and movs and isinstance(movs[0], dict):
+        return movs[0]
+    return None
