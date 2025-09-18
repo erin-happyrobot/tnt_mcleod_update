@@ -302,10 +302,38 @@ def transform_payload(
     print(f"Extracted departure: {extracted_actual_departure}")
     data = deepcopy(payload)
 
+    print(f"Payload keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+    print(f"Full payload structure: {str(data)[:1000]}...")
+
     msg = data.get("message")
     print(f"Message: {msg}")
     if not isinstance(msg, dict):
-        print("Message is not a dict")
+        print("Message is not a dict - checking for movements at top level")
+        # Check if movements is at the top level instead
+        if "movements" in data and isinstance(data["movements"], list) and len(data["movements"]) > 0:
+            print("Found movements at top level")
+            mov0 = data["movements"][0] if isinstance(data["movements"][0], dict) else None
+            if mov0:
+                current_brokerage = mov0.get("brokerage_status")
+                current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
+                print(f"Top-level movements[0].brokerage_status: {current_brokerage}")
+                print(f"Normalized: {current_brokerage_norm}")
+                
+                # Apply transformations to top-level data
+                if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
+                    print(f"Applying transformation for top-level status: {current_brokerage_norm}")
+                    if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR"]:
+                        data["status"] = "P"
+                        mov0["brokerage_status"] = "ARVDSHPR"
+                        mov0["status"] = "P"
+                        # Look for stops at top level
+                        if "stops" in data and isinstance(data["stops"], list) and len(data["stops"]) > 0:
+                            st0 = data["stops"][0]
+                            if isinstance(st0, dict):
+                                st0["status"] = "A"
+                                if extracted_actual_arrival is not None:
+                                    st0["actual_arrival"] = extracted_actual_arrival
+                                    print(f"Set actual_arrival to: {extracted_actual_arrival}")
         # Still strip fields even if structure isn't what we expect.
         return _remove_fields(data)
 
