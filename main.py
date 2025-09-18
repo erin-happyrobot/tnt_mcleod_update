@@ -422,27 +422,32 @@ async def update_load_data(body: UpdateLoadDataRequest):
         raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": missing})
 
     # Target URL: .../orders/{order_id}
-    url = _build_order_url(base_url, order_id)
-    url_for_connect, host_override = _prepare_target(url)
+    url_for_connect = base_url + "/orders/update"
 
     headers = {
         "Authorization": f"Token {token}",
         "X-com.mcleodsoftware.CompanyID": company_id,
         "Accept": "application/json",
     }
-    if host_override:
-        headers.update(host_override)
+
 
     verify_tls = _parse_bool_env("REQUESTS_VERIFY", True)
-    if os.getenv("UPSTREAM_CONNECT_IP") and url.lower().startswith("https://") and os.getenv("REQUESTS_VERIFY") is None:
+    if os.getenv("UPSTREAM_CONNECT_IP") and url_for_connect.lower().startswith("https://") and os.getenv("REQUESTS_VERIFY") is None:
         verify_tls = False
 
     timeout_seconds = float(os.getenv("REQUEST_TIMEOUT_SECONDS") or 15)
     update_method = (os.getenv("UPDATE_METHOD") or "PUT").strip().upper()
 
+    # Add debugging
+    logger.info(f"Attempting {update_method} request to: {url_for_connect}")
+    logger.info(f"Headers: {headers}")
+    logger.info(f"Payload size: {len(str(data_cleaned))} characters")
+
     try:
         if update_method == "POST":
             r = requests.post(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
+        elif update_method == "PATCH":
+            r = requests.patch(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
         else:
             r = requests.put(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
         r.raise_for_status()
