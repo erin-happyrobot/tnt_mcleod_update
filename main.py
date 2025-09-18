@@ -308,6 +308,7 @@ def transform_payload(
         return _remove_fields(data)
 
     mov0 = _get_first_movement(msg)
+    logger.info(f"First movement: {mov0}")
     current_brokerage = (mov0.get("brokerage_status") if isinstance(mov0, dict) else None)
     current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
 
@@ -329,10 +330,13 @@ def transform_payload(
             logger.info("Applying ARVDSHPPER/ARVDSHPR transformation")
             msg["status"] = "P"
             if mov0 is not None:
+                logger.info(f"Setting brokerage_status to ARVDSHPR-- mov0 is not None")
                 mov0["brokerage_status"] = "ARVDSHPR"
                 mov0["status"] = "P"
             st0 = _get_stop(msg, 0)
+            logger.info(f"st0: {st0}")
             if st0 is not None:
+                logger.info("Setting status to A-- st0 is not None")
                 st0["status"] = "A"
                 if extracted_actual_arrival is not None:
                     st0["actual_arrival"] = extracted_actual_arrival
