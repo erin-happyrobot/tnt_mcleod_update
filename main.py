@@ -476,9 +476,9 @@ def _convert_date_format(date_str: str) -> str:
             # Try parsing as-is
             dt = datetime.fromisoformat(date_str)
         
-        # Try different output formats
-        # Format 1: YYYY-MM-DD HH:MM:SS
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
+        # Try different output formats - let's try MM/DD/YYYY format
+        # Format: MM/DD/YYYY
+        return dt.strftime('%m/%d/%Y')
     except Exception as e:
         print(f"Date conversion error: {e}")
         # If conversion fails, return original
