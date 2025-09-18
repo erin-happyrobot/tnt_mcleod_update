@@ -482,19 +482,35 @@ async def update_brokerage_status(body: UpdateBrokerageStatusRequest):
     # Fetch current order payload
     current = _fetch_order_data(order_id)
     
+    # Add debugging to see the actual structure
+    logger.info(f"Order data structure: {list(current.keys()) if isinstance(current, dict) else type(current)}")
+    logger.info(f"Order data sample: {str(current)[:500]}...")
+    
     # Create a deep copy to avoid modifying the original
     data_cleaned = deepcopy(current)
     
     # Update only the movements[0].brokerage_status field
-    msg = data_cleaned.get("message")
-    if isinstance(msg, dict):
-        mov0 = _get_first_movement(msg)
-        if mov0 is not None:
-            mov0["brokerage_status"] = new_brokerage_status
-        else:
-            raise HTTPException(status_code=400, detail={"error": "No movements found in order data"})
+    # Try to find movements in different possible locations
+    movements = None
+    if isinstance(data_cleaned, dict):
+        # Check if movements is at the top level
+        if "movements" in data_cleaned and isinstance(data_cleaned["movements"], list):
+            movements = data_cleaned["movements"]
+        # Check if movements is inside a "message" object
+        elif "message" in data_cleaned and isinstance(data_cleaned["message"], dict):
+            msg = data_cleaned["message"]
+            if "movements" in msg and isinstance(msg["movements"], list):
+                movements = msg["movements"]
+    
+    if movements and len(movements) > 0 and isinstance(movements[0], dict):
+        movements[0]["brokerage_status"] = new_brokerage_status
+        logger.info(f"Updated movements[0].brokerage_status to: {new_brokerage_status}")
     else:
-        raise HTTPException(status_code=400, detail={"error": "Invalid order data structure - no message found"})
+        raise HTTPException(status_code=400, detail={
+            "error": "No movements found in order data", 
+            "available_keys": list(data_cleaned.keys()) if isinstance(data_cleaned, dict) else "Not a dict",
+            "data_structure": str(data_cleaned)[:200]
+        })
 
     # Remove unwanted fields
     data_cleaned = _remove_fields(data_cleaned)
