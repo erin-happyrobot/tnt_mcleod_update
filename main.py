@@ -438,7 +438,7 @@ async def update_load_data(body: UpdateLoadDataRequest):
         verify_tls = False
 
     timeout_seconds = float(os.getenv("REQUEST_TIMEOUT_SECONDS") or 15)
-    update_method = (os.getenv("UPDATE_METHOD") or "PUT").strip().upper()
+    update_method = (os.getenv("UPDATE_METHOD") or "POST").strip().upper()
 
     try:
         if update_method == "POST":
