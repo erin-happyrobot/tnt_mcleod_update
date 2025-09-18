@@ -395,7 +395,6 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
-@app.post("/update_load_data")
 class UpdateLoadDataRequest(BaseModel):
     order_id: str
     extracted_arrival: Optional[str] = None
