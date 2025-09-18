@@ -13,6 +13,7 @@ from pydantic import BaseModel
 import httpx
 from copy import deepcopy
 from typing import Any, Dict, Optional
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -332,8 +333,9 @@ def transform_payload(
                             if isinstance(st0, dict):
                                 st0["status"] = "A"
                                 if extracted_actual_arrival is not None:
-                                    st0["actual_arrival"] = extracted_actual_arrival
-                                    print(f"Set actual_arrival to: {extracted_actual_arrival}")
+                                    converted_arrival = _convert_date_format(extracted_actual_arrival)
+                                    st0["actual_arrival"] = converted_arrival
+                                    print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
         # Still strip fields even if structure isn't what we expect.
         return _remove_fields(data)
 
@@ -370,8 +372,9 @@ def transform_payload(
                 print("Setting status to A-- st0 is not None")
                 st0["status"] = "A"
                 if extracted_actual_arrival is not None:
-                    st0["actual_arrival"] = extracted_actual_arrival
-                    print(f"Set actual_arrival to: {extracted_actual_arrival}")
+                    converted_arrival = _convert_date_format(extracted_actual_arrival)
+                    st0["actual_arrival"] = converted_arrival
+                    print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
                 else:
                     print("No extracted_actual_arrival provided")
 
@@ -385,7 +388,9 @@ def transform_payload(
             if st0 is not None:
                 st0["status"] = "D"
                 if extracted_actual_departure is not None:
-                    st0["actual_departure"] = extracted_actual_departure
+                    converted_departure = _convert_date_format(extracted_actual_departure)
+                    st0["actual_departure"] = converted_departure
+                    print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
         
         elif current_brokerage_norm == "ARVDCNSG":
             # status = P
@@ -397,7 +402,9 @@ def transform_payload(
             if st_last is not None:
                 st_last["status"] = "A"
                 if extracted_actual_arrival is not None:
-                    st_last["actual_arrival"] = extracted_actual_arrival
+                    converted_arrival = _convert_date_format(extracted_actual_arrival)
+                    st_last["actual_arrival"] = converted_arrival
+                    print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
 
         elif current_brokerage_norm == "DELIVER":
             # status = D
@@ -409,7 +416,9 @@ def transform_payload(
             if st_last is not None:
                 st_last["status"] = "D"
                 if extracted_actual_departure is not None:
-                    st_last["actual_departure"] = extracted_actual_departure
+                    converted_departure = _convert_date_format(extracted_actual_departure)
+                    st_last["actual_departure"] = converted_departure
+                    print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
 
         elif current_brokerage_norm == "BREAKDWN":
             if mov0 is not None:
@@ -448,6 +457,32 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if isinstance(movs, list) and movs and isinstance(movs[0], dict):
         return movs[0]
     return None
+
+
+def _convert_date_format(date_str: str) -> str:
+    """
+    Convert ISO 8601 date format to a format the API expects.
+    Try different formats that might be accepted.
+    """
+    if not date_str:
+        return date_str
+    
+    try:
+        # Try to parse the input date
+        if 'T' in date_str and 'Z' in date_str:
+            # ISO 8601 format: 2024-01-15T10:30:00Z
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            # Try parsing as-is
+            dt = datetime.fromisoformat(date_str)
+        
+        # Try different output formats
+        # Format 1: YYYY-MM-DD HH:MM:SS
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        print(f"Date conversion error: {e}")
+        # If conversion fails, return original
+        return date_str
 
 
 class UpdateLoadDataRequest(BaseModel):
