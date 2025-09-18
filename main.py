@@ -309,6 +309,10 @@ def transform_payload(
     current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
 
     # Add debugging
+    print(f"DEBUG: Current brokerage status: {current_brokerage}")
+    print(f"DEBUG: Normalized brokerage status: {current_brokerage_norm}")
+    print(f"DEBUG: Extracted arrival: {extracted_actual_arrival}")
+    print(f"DEBUG: Extracted departure: {extracted_actual_departure}")
     logger.info(f"Current brokerage status: {current_brokerage}")
     logger.info(f"Normalized brokerage status: {current_brokerage_norm}")
     logger.info(f"Extracted arrival: {extracted_actual_arrival}")
@@ -423,14 +427,18 @@ class UpdateBrokerageStatusRequest(BaseModel):
 async def update_load_data(body: UpdateLoadDataRequest):
     order_id = body.order_id
     logger.info(f"Updating load data for order {order_id}")
+    logger.info(f"Request body: order_id={body.order_id}, arrival={body.extracted_arrival}, departure={body.extracted_departure}")
 
     # Fetch current order payload and transform with extracted times
     current = _fetch_order_data(order_id)
+    logger.info(f"Fetched order data, keys: {list(current.keys()) if isinstance(current, dict) else 'Not a dict'}")
+    
     data_cleaned = transform_payload(
         current,
         extracted_actual_arrival=body.extracted_arrival,
         extracted_actual_departure=body.extracted_departure,
     )
+    logger.info(f"After transformation, data_cleaned keys: {list(data_cleaned.keys()) if isinstance(data_cleaned, dict) else 'Not a dict'}")
 
     base_url = os.getenv('GET_URL')
     token = os.getenv('TOKEN')
