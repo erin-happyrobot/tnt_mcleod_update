@@ -336,6 +336,51 @@ def transform_payload(
                                     converted_arrival = _convert_date_format(extracted_actual_arrival)
                                     st0["actual_arrival"] = converted_arrival
                                     print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
+                    
+                    elif current_brokerage_norm == "ENROUTE":
+                        data["status"] = "P"
+                        mov0["brokerage_status"] = "ENROUTE"
+                        mov0["status"] = "P"
+                        # Look for stops at top level
+                        if "stops" in data and isinstance(data["stops"], list) and len(data["stops"]) > 0:
+                            st0 = data["stops"][0]
+                            if isinstance(st0, dict):
+                                st0["status"] = "D"
+                                if extracted_actual_departure is not None:
+                                    converted_departure = _convert_date_format(extracted_actual_departure)
+                                    st0["actual_departure"] = converted_departure
+                                    print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
+                    
+                    elif current_brokerage_norm == "ARVDCNSG":
+                        data["status"] = "P"
+                        mov0["brokerage_status"] = "ARVDCNSG"
+                        mov0["status"] = "P"
+                        # Look for stops at top level - last stop
+                        if "stops" in data and isinstance(data["stops"], list) and len(data["stops"]) > 0:
+                            st_last = data["stops"][-1]
+                            if isinstance(st_last, dict):
+                                st_last["status"] = "A"
+                                if extracted_actual_arrival is not None:
+                                    converted_arrival = _convert_date_format(extracted_actual_arrival)
+                                    st_last["actual_arrival"] = converted_arrival
+                                    print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
+                    
+                    elif current_brokerage_norm == "DELIVER":
+                        data["status"] = "D"
+                        mov0["brokerage_status"] = "DELIVER"
+                        mov0["status"] = "D"
+                        # Look for stops at top level - last stop
+                        if "stops" in data and isinstance(data["stops"], list) and len(data["stops"]) > 0:
+                            st_last = data["stops"][-1]
+                            if isinstance(st_last, dict):
+                                st_last["status"] = "D"
+                                if extracted_actual_departure is not None:
+                                    converted_departure = _convert_date_format(extracted_actual_departure)
+                                    st_last["actual_departure"] = converted_departure
+                                    print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
+                    
+                    elif current_brokerage_norm == "BREAKDWN":
+                        mov0["brokerage_status"] = "BREAKDWN"
         # Still strip fields even if structure isn't what we expect.
         return _remove_fields(data)
 
