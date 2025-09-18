@@ -404,6 +404,11 @@ class UpdateLoadDataRequest(BaseModel):
     extracted_departure: Optional[str] = None
 
 
+class UpdateBrokerageStatusRequest(BaseModel):
+    order_id: str
+    brokerage_status: str
+
+
 @app.post("/update_load_data")
 async def update_load_data(body: UpdateLoadDataRequest):
     order_id = body.order_id
@@ -433,6 +438,83 @@ async def update_load_data(body: UpdateLoadDataRequest):
         "Accept": "application/json",
     }
 
+
+    verify_tls = _parse_bool_env("REQUESTS_VERIFY", True)
+    if os.getenv("UPSTREAM_CONNECT_IP") and url_for_connect.lower().startswith("https://") and os.getenv("REQUESTS_VERIFY") is None:
+        verify_tls = False
+
+    timeout_seconds = float(os.getenv("REQUEST_TIMEOUT_SECONDS") or 15)
+    update_method = (os.getenv("UPDATE_METHOD") or "PUT").strip().upper()
+
+    # Add debugging
+    logger.info(f"Attempting {update_method} request to: {url_for_connect}")
+    logger.info(f"Headers: {headers}")
+    logger.info(f"Payload size: {len(str(data_cleaned))} characters")
+
+    try:
+        if update_method == "POST":
+            r = requests.post(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
+        elif update_method == "PATCH":
+            r = requests.patch(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
+        else:
+            r = requests.put(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
+        r.raise_for_status()
+        return {"status": "ok", "message": r.json()}
+    except requests.exceptions.HTTPError as exc:
+        status = getattr(exc.response, "status_code", 502) if hasattr(exc, "response") else 502
+        try:
+            detail = exc.response.json() if exc.response is not None else str(exc)
+        except Exception:
+            detail = exc.response.text if exc.response is not None else str(exc)
+        raise HTTPException(status_code=status, detail={"error": "Upstream HTTP error", "detail": detail})
+    except requests.exceptions.SSLError as exc:
+        raise HTTPException(status_code=502, detail={"error": "TLS error to upstream", "detail": str(exc)})
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=502, detail={"error": "Upstream connection error", "detail": str(exc)})
+
+
+@app.post("/update_brokerage_status")
+async def update_brokerage_status(body: UpdateBrokerageStatusRequest):
+    order_id = body.order_id
+    new_brokerage_status = body.brokerage_status
+    logger.info(f"Updating brokerage status for order {order_id} to {new_brokerage_status}")
+
+    # Fetch current order payload
+    current = _fetch_order_data(order_id)
+    
+    # Create a deep copy to avoid modifying the original
+    data_cleaned = deepcopy(current)
+    
+    # Update only the movements[0].brokerage_status field
+    msg = data_cleaned.get("message")
+    if isinstance(msg, dict):
+        mov0 = _get_first_movement(msg)
+        if mov0 is not None:
+            mov0["brokerage_status"] = new_brokerage_status
+        else:
+            raise HTTPException(status_code=400, detail={"error": "No movements found in order data"})
+    else:
+        raise HTTPException(status_code=400, detail={"error": "Invalid order data structure - no message found"})
+
+    # Remove unwanted fields
+    data_cleaned = _remove_fields(data_cleaned)
+
+    # Send update to upstream API
+    base_url = os.getenv('GET_URL')
+    token = os.getenv('TOKEN')
+    company_id = os.getenv('COMPANY_ID')
+    missing = [n for n,v in [("GET_URL", base_url), ("TOKEN", token), ("COMPANY_ID", company_id)] if not v]
+    if missing:
+        raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": missing})
+
+    # Target URL: .../orders/update
+    url_for_connect = base_url + "/orders/update"
+
+    headers = {
+        "Authorization": f"Token {token}",
+        "X-com.mcleodsoftware.CompanyID": company_id,
+        "Accept": "application/json",
+    }
 
     verify_tls = _parse_bool_env("REQUESTS_VERIFY", True)
     if os.getenv("UPSTREAM_CONNECT_IP") and url_for_connect.lower().startswith("https://") and os.getenv("REQUESTS_VERIFY") is None:
