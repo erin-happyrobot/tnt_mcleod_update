@@ -461,29 +461,56 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def _convert_date_format(date_str: str) -> str:
     """
-    Convert ISO 8601 date format to a format the API expects.
-    Preserve the actual time information.
+    Convert ISO 8601 date format to the API's expected format: YYYYMMDDHHMMSS-HHMM
+    Handle CST/CDT timezone conversion.
     """
     if not date_str:
         return date_str
     
     try:
-        # Try to parse the input date
+        # Parse the input date
         if 'T' in date_str and 'Z' in date_str:
-            # ISO 8601 format: 2024-01-15T10:30:00Z
-            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # ISO 8601 format: 2024-01-15T10:30:00Z (UTC)
+            dt_utc = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
         else:
             # Try parsing as-is
-            dt = datetime.fromisoformat(date_str)
+            dt_utc = datetime.fromisoformat(date_str)
         
-        # Format: YYYYMMDDHHMMSS-HHMM (preserving time)
-        # This matches the format you're seeing: 20240115000000-0600
-        # But with the actual time: 20240115103000-0600
-        return dt.strftime('%Y%m%d%H%M%S%z').replace('+', '').replace('-', '-')
+        # Convert UTC to Central Time (CST/CDT)
+        # CST is UTC-6, CDT is UTC-5
+        # We'll use a simple approach: assume CST for now, but this could be enhanced
+        # to detect DST based on the date
+        import pytz
+        utc = pytz.UTC
+        central = pytz.timezone('US/Central')
+        
+        # Convert to Central Time
+        dt_central = dt_utc.astimezone(central)
+        
+        # Format: YYYYMMDDHHMMSS-HHMM
+        # Get the timezone offset in the format -HHMM
+        offset = dt_central.strftime('%z')  # This gives +0600 or +0500
+        if offset.startswith('+'):
+            offset = '-' + offset[1:]  # Convert +0600 to -0600
+        else:
+            offset = '+' + offset[1:]  # Convert -0600 to +0600 (though this is less likely)
+        
+        # Format the date and time
+        date_time_str = dt_central.strftime('%Y%m%d%H%M%S')
+        return f"{date_time_str}{offset}"
+        
     except Exception as e:
         print(f"Date conversion error: {e}")
-        # If conversion fails, return original
-        return date_str
+        # Fallback: try a simpler approach
+        try:
+            if 'T' in date_str and 'Z' in date_str:
+                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                # Simple fallback: assume CST (-0600)
+                return dt.strftime('%Y%m%d%H%M%S') + '-0600'
+            else:
+                return date_str
+        except:
+            return date_str
 
 
 class UpdateLoadDataRequest(BaseModel):
