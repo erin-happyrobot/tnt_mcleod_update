@@ -9,6 +9,7 @@ import logging
 import ssl
 import json
 from fastapi import Response
+from pydantic import BaseModel
 import httpx
 from copy import deepcopy
 from typing import Any, Dict, Optional
@@ -281,7 +282,6 @@ def _prepare_target(url: str):
     extra_headers = {"Host": host_header} if host_header else None
     return new_url, extra_headers
 
-@app.put("/update_load_data")
 def transform_payload(
     payload: Dict[str, Any],
     extracted_actual_arrival: Optional[str] = None,
@@ -393,3 +393,69 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if isinstance(movs, list) and movs and isinstance(movs[0], dict):
         return movs[0]
     return None
+
+
+@app.post("/update_load_data")
+class UpdateLoadDataRequest(BaseModel):
+    order_id: str
+    extracted_arrival: Optional[str] = None
+    extracted_departure: Optional[str] = None
+
+
+@app.post("/update_load_data")
+async def update_load_data(body: UpdateLoadDataRequest):
+    order_id = body.order_id
+    logger.info(f"Updating load data for order {order_id}")
+
+    # Fetch current order payload and transform with extracted times
+    current = _fetch_order_data(order_id)
+    data_cleaned = transform_payload(
+        current,
+        extracted_actual_arrival=body.extracted_arrival,
+        extracted_actual_departure=body.extracted_departure,
+    )
+
+    base_url = os.getenv('GET_URL')
+    token = os.getenv('TOKEN')
+    company_id = os.getenv('COMPANY_ID')
+    missing = [n for n,v in [("GET_URL", base_url), ("TOKEN", token), ("COMPANY_ID", company_id)] if not v]
+    if missing:
+        raise HTTPException(status_code=500, detail={"error": "Missing required environment variables", "missing": missing})
+
+    # Target URL: .../orders/{order_id}
+    url = _build_order_url(base_url, order_id)
+    url_for_connect, host_override = _prepare_target(url)
+
+    headers = {
+        "Authorization": f"Token {token}",
+        "X-com.mcleodsoftware.CompanyID": company_id,
+        "Accept": "application/json",
+    }
+    if host_override:
+        headers.update(host_override)
+
+    verify_tls = _parse_bool_env("REQUESTS_VERIFY", True)
+    if os.getenv("UPSTREAM_CONNECT_IP") and url.lower().startswith("https://") and os.getenv("REQUESTS_VERIFY") is None:
+        verify_tls = False
+
+    timeout_seconds = float(os.getenv("REQUEST_TIMEOUT_SECONDS") or 15)
+    update_method = (os.getenv("UPDATE_METHOD") or "PUT").strip().upper()
+
+    try:
+        if update_method == "POST":
+            r = requests.post(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
+        else:
+            r = requests.put(url_for_connect, headers=headers, json=data_cleaned, timeout=timeout_seconds, verify=verify_tls)
+        r.raise_for_status()
+        return {"status": "ok", "message": r.json()}
+    except requests.exceptions.HTTPError as exc:
+        status = getattr(exc.response, "status_code", 502) if hasattr(exc, "response") else 502
+        try:
+            detail = exc.response.json() if exc.response is not None else str(exc)
+        except Exception:
+            detail = exc.response.text if exc.response is not None else str(exc)
+        raise HTTPException(status_code=status, detail={"error": "Upstream HTTP error", "detail": detail})
+    except requests.exceptions.SSLError as exc:
+        raise HTTPException(status_code=502, detail={"error": "TLS error to upstream", "detail": str(exc)})
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=502, detail={"error": "Upstream connection error", "detail": str(exc)})
