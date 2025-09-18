@@ -308,11 +308,18 @@ def transform_payload(
     current_brokerage = (mov0.get("brokerage_status") if isinstance(mov0, dict) else None)
     current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
 
+    # Add debugging
+    logger.info(f"Current brokerage status: {current_brokerage}")
+    logger.info(f"Normalized brokerage status: {current_brokerage_norm}")
+    logger.info(f"Extracted arrival: {extracted_actual_arrival}")
+    logger.info(f"Extracted departure: {extracted_actual_departure}")
+
     # ----- Rules -----
     # Only apply transformations for specific statuses
-    if current_brokerage_norm in ["ARVDSHPPER", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
-        if current_brokerage_norm == "ARVDSHPPER":
+    if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
+        if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR"]:
             # status = P
+            logger.info("Applying ARVDSHPPER/ARVDSHPR transformation")
             msg["status"] = "P"
             if mov0 is not None:
                 mov0["brokerage_status"] = "ARVDSHPR"
@@ -322,6 +329,9 @@ def transform_payload(
                 st0["status"] = "A"
                 if extracted_actual_arrival is not None:
                     st0["actual_arrival"] = extracted_actual_arrival
+                    logger.info(f"Set actual_arrival to: {extracted_actual_arrival}")
+                else:
+                    logger.info("No extracted_actual_arrival provided")
 
         elif current_brokerage_norm == "ENROUTE":
             # status = P
