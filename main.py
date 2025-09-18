@@ -303,49 +303,49 @@ def transform_payload(
     data = deepcopy(payload)
 
     msg = data.get("message")
-    logger.info(f"Message: {msg}")
+    print(f"Message: {msg}")
     if not isinstance(msg, dict):
-        logger.info("Message is not a dict")
+        print("Message is not a dict")
         # Still strip fields even if structure isn't what we expect.
         return _remove_fields(data)
 
     mov0 = _get_first_movement(msg)
-    logger.info(f"First movement: {mov0}")
+    print(f"First movement: {mov0}")
     current_brokerage = (mov0.get("brokerage_status") if isinstance(mov0, dict) else None)
     current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
-    logger.info(f"Current brokerage: {current_brokerage}")
+    print(f"Current brokerage: {current_brokerage}")
     # Add debugging
     print(f"DEBUG: Current brokerage status: {current_brokerage}")
     print(f"DEBUG: Normalized brokerage status: {current_brokerage_norm}")
     print(f"DEBUG: Extracted arrival: {extracted_actual_arrival}")
     print(f"DEBUG: Extracted departure: {extracted_actual_departure}")
-    logger.info(f"Current brokerage status: {current_brokerage}")
-    logger.info(f"Normalized brokerage status: {current_brokerage_norm}")
+    print(f"Current brokerage status: {current_brokerage}")
+    print(f"Normalized brokerage status: {current_brokerage_norm}")
     logger.info(f"Extracted arrival: {extracted_actual_arrival}")
-    logger.info(f"Extracted departure: {extracted_actual_departure}")
+    print(f"Extracted departure: {extracted_actual_departure}")
 
     # ----- Rules -----
     # Only apply transformations for specific statuses
     if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
-        logger.info(f"Current brokerage status: {current_brokerage_norm} it is in the list")
+        print(f"Current brokerage status: {current_brokerage_norm} it is in the list")
         if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR"]:
             # status = P
-            logger.info("Applying ARVDSHPPER/ARVDSHPR transformation")
+            print("Applying ARVDSHPPER/ARVDSHPR transformation")
             msg["status"] = "P"
             if mov0 is not None:
-                logger.info(f"Setting brokerage_status to ARVDSHPR-- mov0 is not None")
+                print(f"Setting brokerage_status to ARVDSHPR-- mov0 is not None")
                 mov0["brokerage_status"] = "ARVDSHPR"
                 mov0["status"] = "P"
             st0 = _get_stop(msg, 0)
-            logger.info(f"st0: {st0}")
+            print(f"st0: {st0}")
             if st0 is not None:
-                logger.info("Setting status to A-- st0 is not None")
+                print("Setting status to A-- st0 is not None")
                 st0["status"] = "A"
                 if extracted_actual_arrival is not None:
                     st0["actual_arrival"] = extracted_actual_arrival
-                    logger.info(f"Set actual_arrival to: {extracted_actual_arrival}")
+                    print(f"Set actual_arrival to: {extracted_actual_arrival}")
                 else:
-                    logger.info("No extracted_actual_arrival provided")
+                    print("No extracted_actual_arrival provided")
 
         elif current_brokerage_norm == "ENROUTE":
             # status = P
@@ -358,7 +358,7 @@ def transform_payload(
                 st0["status"] = "D"
                 if extracted_actual_departure is not None:
                     st0["actual_departure"] = extracted_actual_departure
-
+        
         elif current_brokerage_norm == "ARVDCNSG":
             # status = P
             msg["status"] = "P"
