@@ -462,7 +462,7 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def _convert_date_format(date_str: str) -> str:
     """
     Convert ISO 8601 date format to a format the API expects.
-    Try different formats that might be accepted.
+    Preserve the actual time information.
     """
     if not date_str:
         return date_str
@@ -476,9 +476,10 @@ def _convert_date_format(date_str: str) -> str:
             # Try parsing as-is
             dt = datetime.fromisoformat(date_str)
         
-        # Try different output formats - let's try MM/DD/YYYY format
-        # Format: MM/DD/YYYY
-        return dt.strftime('%m/%d/%Y')
+        # Format: YYYYMMDDHHMMSS-HHMM (preserving time)
+        # This matches the format you're seeing: 20240115000000-0600
+        # But with the actual time: 20240115103000-0600
+        return dt.strftime('%Y%m%d%H%M%S%z').replace('+', '').replace('-', '-')
     except Exception as e:
         print(f"Date conversion error: {e}")
         # If conversion fails, return original
