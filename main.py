@@ -309,58 +309,61 @@ def transform_payload(
     current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
 
     # ----- Rules -----
-    if current_brokerage_norm == "ARVDSHPPER":
-        # status = P
-        msg["status"] = "P"
-        if mov0 is not None:
-            mov0["brokerage_status"] = "ARVDSHPR"
-            mov0["status"] = "P"
-        st0 = _get_stop(msg, 0)
-        if st0 is not None:
-            st0["status"] = "A"
-            if extracted_actual_arrival is not None:
-                st0["actual_arrival"] = extracted_actual_arrival
+    # Only apply transformations for specific statuses
+    if current_brokerage_norm in ["ARVDSHPPER", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
+        if current_brokerage_norm == "ARVDSHPPER":
+            # status = P
+            msg["status"] = "P"
+            if mov0 is not None:
+                mov0["brokerage_status"] = "ARVDSHPR"
+                mov0["status"] = "P"
+            st0 = _get_stop(msg, 0)
+            if st0 is not None:
+                st0["status"] = "A"
+                if extracted_actual_arrival is not None:
+                    st0["actual_arrival"] = extracted_actual_arrival
 
-    elif current_brokerage_norm == "ENROUTE":
-        # status = P
-        msg["status"] = "P"
-        if mov0 is not None:
-            mov0["brokerage_status"] = "ENROUTE"
-            mov0["status"] = "P"
-        st0 = _get_stop(msg, 0)
-        if st0 is not None:
-            st0["status"] = "D"
-            if extracted_actual_departure is not None:
-                st0["actual_departure"] = extracted_actual_departure
+        elif current_brokerage_norm == "ENROUTE":
+            # status = P
+            msg["status"] = "P"
+            if mov0 is not None:
+                mov0["brokerage_status"] = "ENROUTE"
+                mov0["status"] = "P"
+            st0 = _get_stop(msg, 0)
+            if st0 is not None:
+                st0["status"] = "D"
+                if extracted_actual_departure is not None:
+                    st0["actual_departure"] = extracted_actual_departure
 
-    elif current_brokerage_norm == "ARVDCNSG":
-        # status = P
-        msg["status"] = "P"
-        if mov0 is not None:
-            mov0["brokerage_status"] = "ARVDCNSG"
-            mov0["status"] = "P"
-        st_last = _get_stop(msg, -1)
-        if st_last is not None:
-            st_last["status"] = "A"
-            if extracted_actual_arrival is not None:
-                st_last["actual_arrival"] = extracted_actual_arrival
+        elif current_brokerage_norm == "ARVDCNSG":
+            # status = P
+            msg["status"] = "P"
+            if mov0 is not None:
+                mov0["brokerage_status"] = "ARVDCNSG"
+                mov0["status"] = "P"
+            st_last = _get_stop(msg, -1)
+            if st_last is not None:
+                st_last["status"] = "A"
+                if extracted_actual_arrival is not None:
+                    st_last["actual_arrival"] = extracted_actual_arrival
 
-    elif current_brokerage_norm == "DELIVER":
-        # status = D
-        msg["status"] = "D"
-        if mov0 is not None:
-            mov0["brokerage_status"] = "DELIVER"
-            mov0["status"] = "D"
-        st_last = _get_stop(msg, -1)
-        if st_last is not None:
-            st_last["status"] = "D"
-            if extracted_actual_departure is not None:
-                st_last["actual_departure"] = extracted_actual_departure
+        elif current_brokerage_norm == "DELIVER":
+            # status = D
+            msg["status"] = "D"
+            if mov0 is not None:
+                mov0["brokerage_status"] = "DELIVER"
+                mov0["status"] = "D"
+            st_last = _get_stop(msg, -1)
+            if st_last is not None:
+                st_last["status"] = "D"
+                if extracted_actual_departure is not None:
+                    st_last["actual_departure"] = extracted_actual_departure
 
-    elif current_brokerage_norm == "BREAKDWN":
-        if mov0 is not None:
-            mov0["brokerage_status"] = "BREAKDWN"
-        pass
+        elif current_brokerage_norm == "BREAKDWN":
+            if mov0 is not None:
+                mov0["brokerage_status"] = "BREAKDWN"
+            pass
+    # If status is not one of the above, no changes are made
 
     # Strip unwanted fields last so we don't accidentally reintroduce them.
     return _remove_fields(data)
