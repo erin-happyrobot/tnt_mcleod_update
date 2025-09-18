@@ -325,6 +325,7 @@ def transform_payload(
     # ----- Rules -----
     # Only apply transformations for specific statuses
     if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
+        logger.info(f"Current brokerage status: {current_brokerage_norm} it is in the list")
         if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR"]:
             # status = P
             logger.info("Applying ARVDSHPPER/ARVDSHPR transformation")
