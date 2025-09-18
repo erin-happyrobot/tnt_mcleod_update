@@ -303,7 +303,9 @@ def transform_payload(
     data = deepcopy(payload)
 
     msg = data.get("message")
+    logger.info(f"Message: {msg}")
     if not isinstance(msg, dict):
+        logger.info("Message is not a dict")
         # Still strip fields even if structure isn't what we expect.
         return _remove_fields(data)
 
@@ -311,7 +313,7 @@ def transform_payload(
     logger.info(f"First movement: {mov0}")
     current_brokerage = (mov0.get("brokerage_status") if isinstance(mov0, dict) else None)
     current_brokerage_norm = str(current_brokerage).upper() if current_brokerage is not None else None
-
+    logger.info(f"Current brokerage: {current_brokerage}")
     # Add debugging
     print(f"DEBUG: Current brokerage status: {current_brokerage}")
     print(f"DEBUG: Normalized brokerage status: {current_brokerage_norm}")
