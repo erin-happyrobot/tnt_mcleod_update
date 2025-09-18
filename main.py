@@ -297,6 +297,9 @@ def transform_payload(
         * BREAKDWN   -> (no changes; placeholder branch)
     - If "message" doesn't exist, will fall back to top-level "status" only where applicable.
     """
+    print("=== TRANSFORM_PAYLOAD CALLED ===")
+    print(f"Extracted arrival: {extracted_actual_arrival}")
+    print(f"Extracted departure: {extracted_actual_departure}")
     data = deepcopy(payload)
 
     msg = data.get("message")
@@ -425,7 +428,12 @@ class UpdateBrokerageStatusRequest(BaseModel):
 
 @app.post("/update_load_data")
 async def update_load_data(body: UpdateLoadDataRequest):
+    print("=== UPDATE_LOAD_DATA ENDPOINT CALLED ===")
     order_id = body.order_id
+    print(f"Order ID: {order_id}")
+    print(f"Arrival: {body.extracted_arrival}")
+    print(f"Departure: {body.extracted_departure}")
+    
     logger.info(f"Updating load data for order {order_id}")
     logger.info(f"Request body: order_id={body.order_id}, arrival={body.extracted_arrival}, departure={body.extracted_departure}")
 
