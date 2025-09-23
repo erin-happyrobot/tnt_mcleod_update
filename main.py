@@ -305,6 +305,7 @@ def transform_payload(
     print(f"Extracted departure: {extracted_actual_departure}")
     data = deepcopy(payload)
 
+
     print(f"Payload keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
     print(f"Full payload structure: {str(data)[:1000]}...")
 
@@ -325,6 +326,23 @@ def transform_payload(
                 # Apply transformations to top-level data
                 if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
                     print(f"Applying transformation for top-level status: {current_brokerage_norm}")
+                    
+                    # Check if we have valid times for the required status
+                    has_valid_times = False
+                    if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ARVDCNSG"]:
+                        has_valid_times = _is_valid_time(extracted_actual_arrival)
+                        print(f"Top-level ARVDSHPPER/ARVDSHPR/ARVDCNSG - has valid arrival time: {has_valid_times}")
+                    elif current_brokerage_norm in ["ENROUTE", "DELIVER"]:
+                        has_valid_times = _is_valid_time(extracted_actual_departure)
+                        print(f"Top-level ENROUTE/DELIVER - has valid departure time: {has_valid_times}")
+                    elif current_brokerage_norm == "BREAKDWN":
+                        has_valid_times = True  # BREAKDWN doesn't require times
+                        print(f"Top-level BREAKDWN - no time required: {has_valid_times}")
+                    
+                    if not has_valid_times:
+                        print(f"No valid times provided for top-level {current_brokerage_norm} - skipping all transformations")
+                        return _remove_fields(data)
+                    
                     if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR"]:
                         data["status"] = "P"
                         mov0["brokerage_status"] = "ARVDSHPR"
@@ -410,9 +428,26 @@ def transform_payload(
     print(f"Extracted departure: {extracted_actual_departure}")
 
     # ----- Rules -----
-    # Only apply transformations for specific statuses
+    # Only apply transformations for specific statuses AND if valid times are provided
     if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ENROUTE", "ARVDCNSG", "DELIVER", "BREAKDWN"]:
         print(f"Current brokerage status: {current_brokerage_norm} it is in the list")
+        
+        # Check if we have valid times for the required status
+        has_valid_times = False
+        if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR", "ARVDCNSG"]:
+            has_valid_times = _is_valid_time(extracted_actual_arrival)
+            print(f"ARVDSHPPER/ARVDSHPR/ARVDCNSG - has valid arrival time: {has_valid_times}")
+        elif current_brokerage_norm in ["ENROUTE", "DELIVER"]:
+            has_valid_times = _is_valid_time(extracted_actual_departure)
+            print(f"ENROUTE/DELIVER - has valid departure time: {has_valid_times}")
+        elif current_brokerage_norm == "BREAKDWN":
+            has_valid_times = True  # BREAKDWN doesn't require times
+            print(f"BREAKDWN - no time required: {has_valid_times}")
+        
+        if not has_valid_times:
+            print(f"No valid times provided for {current_brokerage_norm} - skipping all transformations")
+            return _remove_fields(data)
+        
         if current_brokerage_norm in ["ARVDSHPPER", "ARVDSHPR"]:
             # status = P
             print("Applying ARVDSHPPER/ARVDSHPR transformation")
