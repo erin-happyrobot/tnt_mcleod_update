@@ -334,10 +334,12 @@ def transform_payload(
                             st0 = data["stops"][0]
                             if isinstance(st0, dict):
                                 st0["status"] = "A"
-                                if extracted_actual_arrival is not None:
+                                if _is_valid_time(extracted_actual_arrival):
                                     converted_arrival = _convert_date_format(extracted_actual_arrival)
                                     st0["actual_arrival"] = converted_arrival
                                     print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
+                                else:
+                                    print("No valid extracted_actual_arrival provided - skipping time update")
                     
                     elif current_brokerage_norm == "ENROUTE":
                         data["status"] = "P"
@@ -348,10 +350,12 @@ def transform_payload(
                             st0 = data["stops"][0]
                             if isinstance(st0, dict):
                                 st0["status"] = "D"
-                                if extracted_actual_departure is not None:
+                                if _is_valid_time(extracted_actual_departure):
                                     converted_departure = _convert_date_format(extracted_actual_departure)
                                     st0["actual_departure"] = converted_departure
                                     print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
+                                else:
+                                    print("No valid extracted_actual_departure provided - skipping time update")
                     
                     elif current_brokerage_norm == "ARVDCNSG":
                         data["status"] = "P"
@@ -362,10 +366,12 @@ def transform_payload(
                             st_last = data["stops"][-1]
                             if isinstance(st_last, dict):
                                 st_last["status"] = "A"
-                                if extracted_actual_arrival is not None:
+                                if _is_valid_time(extracted_actual_arrival):
                                     converted_arrival = _convert_date_format(extracted_actual_arrival)
                                     st_last["actual_arrival"] = converted_arrival
                                     print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
+                                else:
+                                    print("No valid extracted_actual_arrival provided - skipping time update")
                     
                     elif current_brokerage_norm == "DELIVER":
                         data["status"] = "D"
@@ -376,10 +382,12 @@ def transform_payload(
                             st_last = data["stops"][-1]
                             if isinstance(st_last, dict):
                                 st_last["status"] = "D"
-                                if extracted_actual_departure is not None:
+                                if _is_valid_time(extracted_actual_departure):
                                     converted_departure = _convert_date_format(extracted_actual_departure)
                                     st_last["actual_departure"] = converted_departure
                                     print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
+                                else:
+                                    print("No valid extracted_actual_departure provided - skipping time update")
                     
                     elif current_brokerage_norm == "BREAKDWN":
                         mov0["brokerage_status"] = "BREAKDWN"
@@ -418,12 +426,12 @@ def transform_payload(
             if st0 is not None:
                 print("Setting status to A-- st0 is not None")
                 st0["status"] = "A"
-                if extracted_actual_arrival is not None:
+                if _is_valid_time(extracted_actual_arrival):
                     converted_arrival = _convert_date_format(extracted_actual_arrival)
                     st0["actual_arrival"] = converted_arrival
                     print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
                 else:
-                    print("No extracted_actual_arrival provided")
+                    print("No valid extracted_actual_arrival provided - skipping time update")
 
         elif current_brokerage_norm == "ENROUTE":
             # status = P
@@ -434,10 +442,12 @@ def transform_payload(
             st0 = _get_stop(msg, 0)
             if st0 is not None:
                 st0["status"] = "D"
-                if extracted_actual_departure is not None:
+                if _is_valid_time(extracted_actual_departure):
                     converted_departure = _convert_date_format(extracted_actual_departure)
                     st0["actual_departure"] = converted_departure
                     print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
+                else:
+                    print("No valid extracted_actual_departure provided - skipping time update")
         
         elif current_brokerage_norm == "ARVDCNSG":
             # status = P
@@ -448,10 +458,12 @@ def transform_payload(
             st_last = _get_stop(msg, -1)
             if st_last is not None:
                 st_last["status"] = "A"
-                if extracted_actual_arrival is not None:
+                if _is_valid_time(extracted_actual_arrival):
                     converted_arrival = _convert_date_format(extracted_actual_arrival)
                     st_last["actual_arrival"] = converted_arrival
                     print(f"Set actual_arrival to: {converted_arrival} (converted from {extracted_actual_arrival})")
+                else:
+                    print("No valid extracted_actual_arrival provided - skipping time update")
 
         elif current_brokerage_norm == "DELIVER":
             # status = D
@@ -462,10 +474,12 @@ def transform_payload(
             st_last = _get_stop(msg, -1)
             if st_last is not None:
                 st_last["status"] = "D"
-                if extracted_actual_departure is not None:
+                if _is_valid_time(extracted_actual_departure):
                     converted_departure = _convert_date_format(extracted_actual_departure)
                     st_last["actual_departure"] = converted_departure
                     print(f"Set actual_departure to: {converted_departure} (converted from {extracted_actual_departure})")
+                else:
+                    print("No valid extracted_actual_departure provided - skipping time update")
 
         elif current_brokerage_norm == "BREAKDWN":
             if mov0 is not None:
@@ -504,6 +518,17 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if isinstance(movs, list) and movs and isinstance(movs[0], dict):
         return movs[0]
     return None
+
+
+def _is_valid_time(time_str: Optional[str]) -> bool:
+    """
+    Check if a time string is valid (not None, empty, or just whitespace).
+    """
+    if time_str is None:
+        return False
+    if isinstance(time_str, str) and time_str.strip() == "":
+        return False
+    return True
 
 
 def _convert_date_format(date_str: str) -> str:
