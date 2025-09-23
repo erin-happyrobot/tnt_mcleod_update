@@ -526,8 +526,10 @@ def _is_valid_time(time_str: Optional[str]) -> bool:
     """
     if time_str is None:
         return False
-    if isinstance(time_str, str) and time_str.strip() == "":
-        return False
+    if isinstance(time_str, str):
+        stripped = time_str.strip().lower()
+        if stripped == "" or stripped == "null" or stripped == "none":
+            return False
     return True
 
 
