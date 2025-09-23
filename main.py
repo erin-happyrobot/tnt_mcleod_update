@@ -14,6 +14,8 @@ import httpx
 from copy import deepcopy
 from typing import Any, Dict, Optional
 from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo  # Python 3.9+
 
 logger = logging.getLogger(__name__)
 
@@ -506,54 +508,34 @@ def _get_first_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def _convert_date_format(date_str: str) -> str:
     """
-    Convert ISO 8601 date format to the API's expected format: YYYYMMDDHHMMSS-HHMM
-    Properly convert UTC to Central Time.
+    Convert an ISO 8601 UTC/offset datetime to YYYYMMDDHHMMSS-HHMM in US Central.
+    Examples in -> out:
+      2024-01-25T10:30:00Z -> 20240125043000-0600
     """
     if not date_str:
         return date_str
-    
+
     try:
-        # Parse the input date as UTC
-        if 'T' in date_str and 'Z' in date_str:
-            # ISO 8601 format: 2024-01-15T10:30:00Z (UTC)
-            dt_utc = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        # Accept ISO 8601 with 'Z' or explicit offset
+        s = date_str.strip().replace('Z', '+00:00')
+        dt = datetime.fromisoformat(s)
+
+        # If no tzinfo, assume UTC (adjust if your inputs differ)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         else:
-            # Try parsing as-is
-            dt_utc = datetime.fromisoformat(date_str)
-        
-        # Convert to Central Time
-        import pytz
-        utc = pytz.UTC
-        central = pytz.timezone('US/Central')
-        
-        # Convert UTC to Central Time
-        dt_central = dt_utc.astimezone(central)
-        
-        # Format: YYYYMMDDHHMMSS-HHMM
-        # Get the timezone offset in the format -HHMM
-        offset = dt_central.strftime('%z')  # This gives +0600 or +0500
-        if offset.startswith('+'):
-            offset = '-' + offset[1:]  # Convert +0600 to -0600
-        else:
-            offset = '+' + offset[1:]  # Convert -0600 to +0600 (though this is less likely)
-        
-        # Format the date and time in Central Time
-        date_time_str = dt_central.strftime('%Y%m%d%H%M%S')
-        return f"{date_time_str}{offset}"
-        
-    except Exception as e:
-        print(f"Date conversion error: {e}")
-        # Fallback: try a simpler approach
-        try:
-            if 'T' in date_str and 'Z' in date_str:
-                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                # Simple fallback: assume CST (-0600) and subtract 6 hours
-                dt_cst = dt.replace(hour=(dt.hour - 6) % 24)
-                return dt_cst.strftime('%Y%m%d%H%M%S') + '-0600'
-            else:
-                return date_str
-        except:
-            return date_str
+            # Normalize to UTC first (optional but clean)
+            dt = dt.astimezone(timezone.utc)
+
+        # Convert to US Central (handles CST/CDT automatically)
+        central = ZoneInfo('America/Chicago')  # alias of US/Central
+        dt_central = dt.astimezone(central)
+
+        # Format: YYYYMMDDHHMMSS-HHMM (strftime %z already includes the sign)
+        return dt_central.strftime('%Y%m%d%H%M%S%z')
+    except Exception:
+        # If parsing fails, return the original string (or raise)
+        return date_str
 
 
 class UpdateLoadDataRequest(BaseModel):
